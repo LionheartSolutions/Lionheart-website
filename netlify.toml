@@ -1,2 +1,5 @@
 [build]
   functions = "netlify/functions"
+
+[functions."sync-catalog"]
+  schedule = "0 */6 * * *"
