@@ -126,6 +126,22 @@
   .item-btn:hover { background: var(--white); }
   .catalog-status { font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.15em; color: var(--silver-dark); text-transform: uppercase; text-align: center; padding: 3rem 0; }
 
+  /* SEARCH + BRAND FILTER */
+  .catalog-controls { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .catalog-search { flex: 1; min-width: 220px; background: var(--surface); border: 1px solid var(--border); color: var(--silver-light); font-family: var(--font-ui); font-size: 13px; padding: 12px 16px; outline: none; }
+  .catalog-search::placeholder { color: var(--silver-dark); }
+  .catalog-search:focus { border-color: var(--silver-dark); }
+  .brand-select { background: var(--surface); border: 1px solid var(--border); color: var(--silver-mid); font-family: var(--font-ui); font-size: 12px; letter-spacing: 0.05em; padding: 12px 14px; outline: none; cursor: pointer; min-width: 180px; }
+  .results-count { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--silver-dark); margin: 1rem 0 1.5rem; }
+
+  /* PAGINATION */
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 3rem; flex-wrap: wrap; }
+  .page-btn { font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.1em; color: var(--silver-mid); background: var(--surface); border: 1px solid var(--border); padding: 9px 14px; cursor: pointer; transition: all 0.25s; min-width: 38px; text-align: center; }
+  .page-btn:hover:not(:disabled) { border-color: var(--silver-dark); color: var(--silver-light); }
+  .page-btn.active { background: var(--silver-light); color: var(--black); border-color: var(--silver-light); }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .page-ellipsis { color: var(--silver-dark); font-family: var(--font-ui); font-size: 11px; padding: 0 4px; }
+
   /* REQUEST MODAL */
   #requestModal { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.85); backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 1.5rem; }
   #requestModal .modal-box { background: var(--surface); border: 1px solid var(--border); max-width: 440px; width: 100%; padding: 2.5rem 2rem; position: relative; }
@@ -194,8 +210,16 @@
       <div class="section-label">In Stock Now</div>
       <h2 class="section-title">Available<br>Inventory</h2>
     </div>
+    <div class="catalog-controls">
+      <input type="text" class="catalog-search" id="catalogSearch" placeholder="Search by name or manufacturer...">
+      <select class="brand-select" id="brandSelect">
+        <option value="All">All Brands</option>
+      </select>
+    </div>
     <div class="filter-tabs" id="filterTabs"></div>
+    <div class="results-count" id="resultsCount"></div>
     <div class="item-grid" id="itemGrid"></div>
+    <div class="pagination" id="pagination"></div>
   </div>
 </section>
 
@@ -334,7 +358,11 @@
 <script>
   // ---- LIVE CATALOG ----
   let allItems = [];
-  let activeFilter = 'All';
+  let activeCategory = 'All';
+  let activeBrand = 'All';
+  let searchTerm = '';
+  let currentPage = 1;
+  const PAGE_SIZE = 24;
 
   fetch('/.netlify/functions/get-catalog')
     .then(res => res.json())
@@ -344,7 +372,19 @@
       document.querySelector('.catalog-hero').style.display = 'none';
       document.getElementById('liveCatalogSection').style.display = 'block';
       buildFilterTabs();
+      buildBrandSelect();
       renderGrid();
+
+      document.getElementById('catalogSearch').addEventListener('input', (e) => {
+        searchTerm = e.target.value.trim().toLowerCase();
+        currentPage = 1;
+        renderGrid();
+      });
+      document.getElementById('brandSelect').addEventListener('change', (e) => {
+        activeBrand = e.target.value;
+        currentPage = 1;
+        renderGrid();
+      });
     })
     .catch(() => { /* API not configured yet or request failed -- Coming Soon box stays visible */ });
 
@@ -352,26 +392,58 @@
     const categories = ['All', ...new Set(allItems.map(i => i.category))];
     const wrap = document.getElementById('filterTabs');
     wrap.innerHTML = categories.map(cat =>
-      `<button class="filter-tab${cat === 'All' ? ' active' : ''}" onclick="setFilter('${cat.replace(/'/g, "\\'")}')">${cat}</button>`
+      `<button class="filter-tab${cat === 'All' ? ' active' : ''}" onclick="setCategory('${cat.replace(/'/g, "\\'")}')">${cat}</button>`
     ).join('');
   }
 
-  function setFilter(cat) {
-    activeFilter = cat;
+  function buildBrandSelect() {
+    const brands = [...new Set(allItems.map(i => i.manufacturer).filter(Boolean))].sort();
+    const select = document.getElementById('brandSelect');
+    select.innerHTML = '<option value="All">All Brands</option>' +
+      brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+  }
+
+  function setCategory(cat) {
+    activeCategory = cat;
+    currentPage = 1;
     document.querySelectorAll('.filter-tab').forEach(btn => {
       btn.classList.toggle('active', btn.textContent === cat);
     });
     renderGrid();
   }
 
+  function getFilteredItems() {
+    return allItems.filter(i => {
+      if (activeCategory !== 'All' && i.category !== activeCategory) return false;
+      if (activeBrand !== 'All' && i.manufacturer !== activeBrand) return false;
+      if (searchTerm) {
+        const haystack = (i.name + ' ' + i.manufacturer).toLowerCase();
+        if (!haystack.includes(searchTerm)) return false;
+      }
+      return true;
+    });
+  }
+
   function renderGrid() {
-    const items = activeFilter === 'All' ? allItems : allItems.filter(i => i.category === activeFilter);
+    const filtered = getFilteredItems();
     const grid = document.getElementById('itemGrid');
-    if (items.length === 0) {
-      grid.innerHTML = '<div class="catalog-status">No items in this category right now.</div>';
+    const countEl = document.getElementById('resultsCount');
+
+    if (filtered.length === 0) {
+      countEl.textContent = '';
+      grid.innerHTML = '<div class="catalog-status">No items match your search.</div>';
+      document.getElementById('pagination').innerHTML = '';
       return;
     }
-    grid.innerHTML = items.map(item => `
+
+    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    currentPage = Math.min(currentPage, totalPages);
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pageItems = filtered.slice(start, start + PAGE_SIZE);
+
+    countEl.textContent = `Showing ${start + 1}\u2013${Math.min(start + PAGE_SIZE, filtered.length)} of ${filtered.length} items`;
+
+    grid.innerHTML = pageItems.map(item => `
       <div class="item-card">
         <div class="item-img-wrap">
           ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.name)}" loading="lazy">` : `<div class="no-img">✦</div>`}
@@ -384,6 +456,41 @@
         </div>
       </div>
     `).join('');
+
+    renderPagination(totalPages);
+    document.getElementById('liveCatalogSection').scrollIntoView({ behavior: 'instant', block: 'nearest' });
+  }
+
+  function renderPagination(totalPages) {
+    const wrap = document.getElementById('pagination');
+    if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+
+    let html = '';
+    html += `<button class="page-btn" onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>First</button>`;
+    html += `<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>`;
+
+    const windowSize = 2;
+    let pages = new Set([1, totalPages]);
+    for (let p = currentPage - windowSize; p <= currentPage + windowSize; p++) {
+      if (p >= 1 && p <= totalPages) pages.add(p);
+    }
+    const sortedPages = [...pages].sort((a, b) => a - b);
+
+    let lastPage = 0;
+    sortedPages.forEach(p => {
+      if (lastPage && p - lastPage > 1) html += `<span class="page-ellipsis">...</span>`;
+      html += `<button class="page-btn${p === currentPage ? ' active' : ''}" onclick="goToPage(${p})">${p}</button>`;
+      lastPage = p;
+    });
+
+    html += `<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+    html += `<button class="page-btn" onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>Last</button>`;
+    wrap.innerHTML = html;
+  }
+
+  function goToPage(p) {
+    currentPage = p;
+    renderGrid();
   }
 
   function escapeHtml(str) {
@@ -391,6 +498,7 @@
     div.textContent = str || '';
     return div.innerHTML;
   }
+
 
   function openRequestModal(item) {
     document.getElementById('modalItemName').textContent = item.name;
