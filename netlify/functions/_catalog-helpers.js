@@ -57,12 +57,9 @@ function calcPrice(cost, map) {
   return Math.round(price * 100) / 100;
 }
 
-function buildItems(catalogProducts, inventoryMap) {
+function buildItems(catalogProducts) {
   return (catalogProducts || [])
     .map(p => {
-      const qty = inventoryMap[p.product_id] ?? 0;
-      if (qty <= 0) return null;
-
       const rawCategory = (p.product_categories || '').split(',')[0].trim().toUpperCase();
       const mappedCategory = CATEGORY_MAP[rawCategory];
       if (!mappedCategory) return null;
@@ -76,7 +73,6 @@ function buildItems(catalogProducts, inventoryMap) {
         category: mappedCategory,
         image: p.image_url || null,
         upc: p.upc_code || '',
-        qty,
         price: calcPrice(p.base_cost ?? p.list_price, p.manufacturer_advertised_price)
       };
     })
