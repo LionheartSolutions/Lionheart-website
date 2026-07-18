@@ -11,8 +11,15 @@
 const { getStore } = require('@netlify/blobs');
 
 exports.handler = async function (event, context) {
+  const BLOBS_SITE_ID = process.env.BLOBS_SITE_ID;
+  const BLOBS_TOKEN = process.env.BLOBS_TOKEN;
+
+  if (!BLOBS_SITE_ID || !BLOBS_TOKEN) {
+    return { statusCode: 500, body: JSON.stringify({ error: 'Missing BLOBS_SITE_ID or BLOBS_TOKEN environment variable.' }) };
+  }
+
   try {
-    const store = getStore('catalog');
+    const store = getStore({ name: 'catalog', siteID: BLOBS_SITE_ID, token: BLOBS_TOKEN });
     const data = await store.get('items', { type: 'json' });
 
     if (!data) {
