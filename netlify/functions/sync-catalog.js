@@ -44,13 +44,25 @@ exports.handler = async function (event, context) {
     const catalogData = await catalogRes.json();
     const inventoryData = await inventoryRes.json();
 
+    const rawProducts = catalogData.products || [];
+    console.log(`Orion returned ${rawProducts.length} raw catalog products.`);
+    if (rawProducts[0]) {
+      console.log('Sample product keys:', Object.keys(rawProducts[0]).join(', '));
+      console.log('Sample product:', JSON.stringify(rawProducts[0]).slice(0, 500));
+    }
+
     const inventoryMap = {};
     const invList = inventoryData.inventory || inventoryData.products || inventoryData.items || [];
+    console.log(`Orion returned ${invList.length} raw inventory records.`);
+    if (invList[0]) {
+      console.log('Sample inventory record:', JSON.stringify(invList[0]).slice(0, 300));
+    }
     invList.forEach(item => {
       inventoryMap[item.product_id] = item.quantity ?? item.qty ?? item.on_hand ?? 0;
     });
 
-    const items = buildItems(catalogData.products, inventoryMap);
+    const items = buildItems(rawProducts, inventoryMap);
+    console.log(`After inventory + category filtering: ${items.length} items remain.`);
 
     const store = getStore({ name: 'catalog', siteID: BLOBS_SITE_ID, token: BLOBS_TOKEN });
     await store.setJSON('items', { items, updated: new Date().toISOString() });
