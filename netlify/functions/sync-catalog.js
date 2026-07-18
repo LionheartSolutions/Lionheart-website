@@ -1,9 +1,15 @@
 // netlify/functions/sync-catalog.js
 //
 // Runs automatically every 6 hours (see netlify.toml). Pulls the full catalog
-// and inventory from Orion, applies pricing rules, and saves the result to
-// Netlify Blobs. catalog.html never talks to Orion directly -- it reads this
-// cached result via get-catalog.js, which is fast and can't time out.
+// from Orion, applies pricing rules, and saves the result to Netlify Blobs.
+// catalog.html never talks to Orion directly -- it reads this cached result
+// via get-catalog.js, which is fast and can't time out.
+//
+// Note: this does NOT check stock levels -- every mapped item from Orion's
+// catalog shows on the site regardless of availability. Since purchases go
+// through manual approval (not instant checkout), an occasional out-of-stock
+// request just gets handled as "sorry, that one's not available" during
+// the follow-up call.
 //
 // You can also trigger this manually any time: Netlify dashboard -> your site
 // -> Functions -> sync-catalog -> "Run now". Useful right after deploying,
@@ -31,47 +37,24 @@ exports.handler = async function (event, context) {
   try {
     const headers = { 'Connection-Key': API_KEY };
 
-    const [catalogRes, inventoryRes] = await Promise.all([
-      fetch(`${ORION_BASE}?method=get_catalog`, { headers }),
-      fetch(`${ORION_BASE}?method=get_catalog_inventory`, { headers })
-    ]);
+    const catalogRes = await fetch(`${ORION_BASE}?method=get_catalog`, { headers });
 
-    if (!catalogRes.ok || !inventoryRes.ok) {
-      console.error('Orion API request failed', catalogRes.status, inventoryRes.status);
+    if (!catalogRes.ok) {
+      console.error('Orion API request failed', catalogRes.status);
       return { statusCode: 502 };
     }
 
     const catalogData = await catalogRes.json();
-    const inventoryData = await inventoryRes.json();
-
     const rawProducts = catalogData.products || [];
     console.log(`Orion returned ${rawProducts.length} raw catalog products.`);
-    if (rawProducts[0]) {
-      console.log('Sample product keys:', Object.keys(rawProducts[0]).join(', '));
-      console.log('Sample product:', JSON.stringify(rawProducts[0]).slice(0, 500));
-    }
 
-    const inventoryMap = {};
-    const invList = inventoryData.inventory || inventoryData.products || inventoryData.items || [];
-    console.log(`Orion returned ${invList.length} raw inventory records.`);
-    if (invList.length === 0) {
-      console.log('Raw inventory response keys:', Object.keys(inventoryData).join(', '));
-      console.log('Raw inventory response (truncated):', JSON.stringify(inventoryData).slice(0, 800));
-    }
-    if (invList[0]) {
-      console.log('Sample inventory record:', JSON.stringify(invList[0]).slice(0, 300));
-    }
-    invList.forEach(item => {
-      inventoryMap[item.product_id] = item.quantity ?? item.qty ?? item.on_hand ?? 0;
-    });
-
-    const items = buildItems(rawProducts, inventoryMap);
-    console.log(`After inventory + category filtering: ${items.length} items remain.`);
+    const items = buildItems(rawProducts);
+    console.log(`After category filtering: ${items.length} items remain.`);
 
     const store = getStore({ name: 'catalog', siteID: BLOBS_SITE_ID, token: BLOBS_TOKEN });
     await store.setJSON('items', { items, updated: new Date().toISOString() });
 
-    console.log(`Synced ${items.length} in-stock, mapped items from Orion.`);
+    console.log(`Synced ${items.length} mapped items from Orion.`);
     return { statusCode: 200 };
   } catch (err) {
     console.error('sync-catalog error:', err.message);
