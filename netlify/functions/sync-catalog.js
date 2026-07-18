@@ -54,6 +54,10 @@ exports.handler = async function (event, context) {
     const inventoryMap = {};
     const invList = inventoryData.inventory || inventoryData.products || inventoryData.items || [];
     console.log(`Orion returned ${invList.length} raw inventory records.`);
+    if (invList.length === 0) {
+      console.log('Raw inventory response keys:', Object.keys(inventoryData).join(', '));
+      console.log('Raw inventory response (truncated):', JSON.stringify(inventoryData).slice(0, 800));
+    }
     if (invList[0]) {
       console.log('Sample inventory record:', JSON.stringify(invList[0]).slice(0, 300));
     }
