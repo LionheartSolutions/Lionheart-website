@@ -16,9 +16,15 @@ const ORION_BASE = 'https://orionfflsales.com/api.php';
 
 exports.handler = async function (event, context) {
   const API_KEY = process.env.ORION_API_KEY;
+  const BLOBS_SITE_ID = process.env.BLOBS_SITE_ID;
+  const BLOBS_TOKEN = process.env.BLOBS_TOKEN;
 
   if (!API_KEY) {
     console.error('Missing ORION_API_KEY environment variable.');
+    return { statusCode: 500 };
+  }
+  if (!BLOBS_SITE_ID || !BLOBS_TOKEN) {
+    console.error('Missing BLOBS_SITE_ID or BLOBS_TOKEN environment variable.');
     return { statusCode: 500 };
   }
 
@@ -46,7 +52,7 @@ exports.handler = async function (event, context) {
 
     const items = buildItems(catalogData.products, inventoryMap);
 
-    const store = getStore('catalog');
+    const store = getStore({ name: 'catalog', siteID: BLOBS_SITE_ID, token: BLOBS_TOKEN });
     await store.setJSON('items', { items, updated: new Date().toISOString() });
 
     console.log(`Synced ${items.length} in-stock, mapped items from Orion.`);
