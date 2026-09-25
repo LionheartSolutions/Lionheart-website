@@ -80,6 +80,7 @@
 </style>
 <title>Catalog | Lionheart Defense · FFL Dealer St. Augustine, FL</title>
 <meta name="description" content="Browse Lionheart Defense's catalog of firearms, optics, and accessories. Call or contact us to order. Serving St. Augustine and Jacksonville, FL.">
+<link rel="canonical" href="https://lionheartdefensefl.com/catalog.html">
 <style>
   .catalog-hero {
     min-height: 50vh; display: flex; align-items: center; justify-content: center;
@@ -121,7 +122,6 @@
   .item-body { padding: 1.25rem 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.6rem; flex: 1; }
   .item-mfr { font-family: var(--font-ui); font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--silver-dark); }
   .item-name { font-family: var(--font-display); font-size: 1rem; letter-spacing: 0.02em; color: var(--silver-light); line-height: 1.3; }
-  .item-price { font-family: var(--font-ui); font-size: 1.15rem; color: var(--silver-light); margin-top: auto; }
   .item-btn { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--black); background: var(--silver-light); border: none; padding: 12px; cursor: pointer; transition: background 0.3s; margin-top: 0.5rem; }
   .item-btn:hover { background: var(--white); }
   .catalog-status { font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.15em; color: var(--silver-dark); text-transform: uppercase; text-align: center; padding: 3rem 0; }
@@ -147,7 +147,6 @@
   #requestModal .modal-box { background: var(--surface); border: 1px solid var(--border); max-width: 440px; width: 100%; padding: 2.5rem 2rem; position: relative; }
   #requestModal .modal-close { position: absolute; top: 1rem; right: 1.25rem; background: none; border: none; color: var(--silver-dark); font-size: 1.2rem; cursor: pointer; }
   #requestModal .modal-item { font-family: var(--font-display); font-size: 1.2rem; color: var(--silver-light); margin-bottom: 0.25rem; }
-  #requestModal .modal-price { font-family: var(--font-ui); font-size: 13px; color: var(--silver-mid); margin-bottom: 1.5rem; }
   #requestModal label { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--silver-dark); display: block; margin-bottom: 6px; }
   #requestModal input, #requestModal textarea { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); color: var(--silver-light); font-family: var(--font-ui); font-size: 13px; padding: 12px 14px; outline: none; margin-bottom: 1rem; }
   #requestModal .disclaimer { font-family: var(--font-ui); font-size: 10px; color: var(--silver-dark); line-height: 1.6; margin-top: 1rem; text-align: center; }
@@ -182,12 +181,14 @@
 </div>
 
 <!-- HERO -->
+<h1 style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Firearms, Optics &amp; Accessories Catalog | Lionheart Defense, St. Augustine FL</h1>
+
 <section class="catalog-hero">
   <div style="position:relative;z-index:2;width:100%;">
     <p style="font-family:var(--font-ui);font-size:11px;letter-spacing:0.35em;text-transform:uppercase;color:var(--silver-mid);margin-bottom:2rem;">Lionheart Defense</p>
     <div class="coming-soon-box reveal">
       <div class="coming-soon-icon">✦</div>
-      <h1 class="coming-soon-title">Online Catalog<br>Coming Soon</h1>
+      <h2 class="coming-soon-title">Online Catalog<br>Coming Soon</h2>
       <p class="coming-soon-body">Our full inventory of firearms, optics, and accessories will be available here shortly. In the meantime contact us directly · we carry a curated selection of quality firearms and can source virtually anything through our nationwide distributor network.</p>
       <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
         <a href="tel:+19042575123" class="btn-primary">904-257-5123</a>
@@ -228,7 +229,6 @@
   <div class="modal-box">
     <button class="modal-close" onclick="closeRequestModal()" aria-label="Close">✕</button>
     <div class="modal-item" id="modalItemName"></div>
-    <div class="modal-price" id="modalItemPrice"></div>
 
     <form name="catalog-request" method="POST" data-netlify="true" netlify-honeypot="bot-field" onsubmit="handleRequestSubmit(event)">
       <input type="hidden" name="form-name" value="catalog-request">
@@ -451,8 +451,7 @@
         <div class="item-body">
           <div class="item-mfr">${escapeHtml(item.manufacturer)}</div>
           <div class="item-name">${escapeHtml(item.name)}</div>
-          <div class="item-price">$${item.price.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
-          <button class="item-btn" onclick='openRequestModal(${JSON.stringify(item).replace(/'/g, "&#39;")})'>Request to Purchase</button>
+          <button class="item-btn" onclick='openRequestModal(${JSON.stringify(item).replace(/'/g, "&#39;")})'>Request to Order</button>
         </div>
       </div>
     `).join('');
@@ -502,7 +501,6 @@
 
   function openRequestModal(item) {
     document.getElementById('modalItemName').textContent = item.name;
-    document.getElementById('modalItemPrice').textContent = '$' + item.price.toLocaleString(undefined, {minimumFractionDigits: 2});
     document.getElementById('reqItem').value = item.name;
     document.getElementById('reqPrice').value = item.price;
     document.getElementById('reqCode').value = item.code;
@@ -525,7 +523,8 @@
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(data).toString()
     })
-    .then(() => {
+    .then((response) => {
+      if (!response.ok) throw new Error('Form submission failed with status ' + response.status);
       document.getElementById('requestSuccess').style.display = 'block';
       form.reset();
     })
@@ -534,8 +533,8 @@
       const contact = form.contact.value;
       const item = document.getElementById('reqItem').value;
       const price = document.getElementById('reqPrice').value;
-      const subject = encodeURIComponent('Purchase Request · ' + item);
-      const body = encodeURIComponent('Name: ' + name + '\nContact: ' + contact + '\nItem: ' + item + '\nPrice: $' + price);
+      const subject = encodeURIComponent('Order Request · ' + item);
+      const body = encodeURIComponent('Name: ' + name + '\nContact: ' + contact + '\nItem: ' + item + '\nRef price: $' + price);
       window.location.href = 'mailto:intel@lionheartdefensefl.com?subject=' + subject + '&body=' + body;
     });
   }
