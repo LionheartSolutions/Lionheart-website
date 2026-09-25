@@ -78,6 +78,7 @@
 </style>
 <title>Contact | Lionheart Defense · FFL Dealer St. Augustine, FL</title>
 <meta name="description" content="Contact Lionheart Defense for FFL transfers, custom builds, special orders, and firearms training in St. Augustine, FL. Call or text 904-257-5123.">
+<link rel="canonical" href="https://lionheartdefensefl.com/contact.html">
 <style>
   .contact-hero {
     min-height: 40vh; display: flex; align-items: center; justify-content: center;
@@ -298,7 +299,8 @@ function handleContactSubmit(e) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(data).toString()
   })
-  .then(() => {
+  .then((response) => {
+    if (!response.ok) throw new Error('Form submission failed with status ' + response.status);
     document.getElementById('contactSuccess').style.display = 'block';
     form.reset();
   })
