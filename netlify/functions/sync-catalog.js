@@ -14,10 +14,15 @@
 // gap between syncs, that's still handled as "sorry, that one's not
 // available" during the follow-up call -- same as before.
 //
+// The catalog and inventory calls run IN PARALLEL (not one after another).
+// With ~15,000 products, Orion's two endpoints are slow enough that running
+// them sequentially can push this past Netlify's function time limit and
+// get the whole run killed silently before anything is saved. Running them
+// at the same time roughly halves the total wait.
+//
 // If the inventory call fails for any reason, the sync does NOT abort or
 // wipe the catalog -- it just skips the stock filter for that run and shows
 // every mapped item as if in stock, same as the site behaved previously.
-// This avoids one flaky API call taking the whole catalog down.
 //
 // You can also trigger this manually any time: Netlify dashboard -> your site
 // -> Functions -> sync-catalog -> "Run now". Useful right after deploying,
@@ -45,24 +50,28 @@ exports.handler = async function (event, context) {
   try {
     const headers = { 'Connection-Key': API_KEY };
 
-    const catalogRes = await fetch(`${ORION_BASE}?method=get_catalog`, { headers });
-    if (!catalogRes.ok) {
-      console.error('Orion catalog request failed', catalogRes.status);
+    // Fire both requests at once instead of waiting for the first to finish
+    // before starting the second.
+    const [catalogResult, inventoryResult] = await Promise.allSettled([
+      fetch(`${ORION_BASE}?method=get_catalog`, { headers }),
+      fetch(`${ORION_BASE}?method=get_catalog_inventory`, { headers })
+    ]);
+
+    if (catalogResult.status !== 'fulfilled' || !catalogResult.value.ok) {
+      console.error('Orion catalog request failed', catalogResult.status === 'fulfilled' ? catalogResult.value.status : catalogResult.reason);
       return { statusCode: 502 };
     }
-    const catalogData = await catalogRes.json();
+
+    const catalogData = await catalogResult.value.json();
     const rawProducts = catalogData.products || [];
     console.log(`Orion returned ${rawProducts.length} raw catalog products.`);
 
-    // Fetch current stock quantities. This is a separate call from the
-    // catalog itself, so we wrap it in its own try/catch -- if it fails,
-    // we log it and move on without stock filtering rather than failing
-    // the entire sync.
+    // Inventory is best-effort -- if it failed or is slow, we still proceed
+    // without stock filtering rather than failing the entire sync.
     let inventoryMap = null;
-    try {
-      const inventoryRes = await fetch(`${ORION_BASE}?method=get_catalog_inventory`, { headers });
-      if (inventoryRes.ok) {
-        const inventoryData = await inventoryRes.json();
+    if (inventoryResult.status === 'fulfilled' && inventoryResult.value.ok) {
+      try {
+        const inventoryData = await inventoryResult.value.json();
         // Response is keyed by product_id: { "55766": { product_id, product_code, quantity, sale_price }, ... }
         const rawInventory = inventoryData.product_inventory || {};
         inventoryMap = {};
@@ -70,11 +79,12 @@ exports.handler = async function (event, context) {
           inventoryMap[productId] = rawInventory[productId].quantity;
         });
         console.log(`Orion returned inventory data for ${Object.keys(inventoryMap).length} products.`);
-      } else {
-        console.error('Orion inventory request failed', inventoryRes.status, '-- continuing without stock filtering.');
+      } catch (parseErr) {
+        console.error('Failed to parse Orion inventory response:', parseErr.message, '-- continuing without stock filtering.');
       }
-    } catch (invErr) {
-      console.error('Orion inventory request error:', invErr.message, '-- continuing without stock filtering.');
+    } else {
+      const reason = inventoryResult.status === 'fulfilled' ? inventoryResult.value.status : inventoryResult.reason;
+      console.error('Orion inventory request failed:', reason, '-- continuing without stock filtering.');
     }
 
     const items = buildItems(rawProducts, inventoryMap);
