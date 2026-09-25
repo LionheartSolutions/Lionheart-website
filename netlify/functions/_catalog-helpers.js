@@ -53,13 +53,21 @@ function calcPrice(cost, map) {
   let price = rule.type === 'flat' ? base + rule.amount : base * (1 + rule.amount / 100);
 
   if (mapNum > 0 && price < mapNum) price = mapNum; // legal floor: never below MAP
-
   return Math.round(price * 100) / 100;
 }
 
-function buildItems(catalogProducts) {
+// inventoryMap is optional: { [product_id]: quantity }
+// If not provided (or a product_id isn't in it), the item is treated as
+// in-stock -- this keeps the site working even if the inventory call
+// ever fails, rather than hiding everything.
+function buildItems(catalogProducts, inventoryMap) {
   return (catalogProducts || [])
     .map(p => {
+      if (inventoryMap && inventoryMap.hasOwnProperty(p.product_id)) {
+        const qty = inventoryMap[p.product_id];
+        if (!qty || qty <= 0) return null; // out of stock -- skip
+      }
+
       const rawCategory = (p.product_categories || '').split(',')[0].trim().toUpperCase();
       const mappedCategory = CATEGORY_MAP[rawCategory];
       if (!mappedCategory) return null;
